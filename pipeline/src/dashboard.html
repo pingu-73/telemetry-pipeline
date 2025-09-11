@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>F1 Telemetry Dashboard</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Formula1', 'Segoe UI', Tahoma, sans-serif;
+            background: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 100%);
+            color: #fff;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(42, 42, 42, 0.9);
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .logo {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #e10600;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        
+        .driver-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 10px 20px;
+            background: linear-gradient(90deg, #e10600, #ff4444);
+            border-radius: 8px;
+        }
+        
+        .driver-number {
+            font-size: 2.5em;
+            font-weight: bold;
+        }
+        
+        .driver-name {
+            font-size: 1.5em;
+            font-weight: 600;
+        }
+        
+        .status-box {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 5px;
+        }
+        
+        #status {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .connected {
+            background: rgba(0, 255, 0, 0.2);
+            color: #00ff00;
+            border: 1px solid #00ff00;
+        }
+        
+        .disconnected {
+            background: rgba(255, 0, 0, 0.2);
+            color: #ff0000;
+            border: 1px solid #ff0000;
+        }
+        
+        .stats {
+            color: #999;
+            font-size: 0.85em;
+        }
+        
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        
+        .metric {
+            background: rgba(42, 42, 42, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            border-left: 4px solid #e10600;
+            backdrop-filter: blur(10px);
+            transition: transform 0.2s;
+        }
+        
+        .metric:hover {
+            transform: translateY(-2px);
+        }
+        
+        .metric-value {
+            font-size: 2.2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .metric-label {
+            font-size: 0.85em;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+        
+        .chart {
+            background: rgba(42, 42, 42, 0.9);
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .drs-indicator {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .drs-active {
+            background: #00ff00;
+            color: #000;
+        }
+        
+        .drs-inactive {
+            background: #666;
+            color: #fff;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .live-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #00ff00;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <div class="logo">F1 TELEMETRY</div>
+                <div class="driver-info">
+                    <div class="driver-number" id="carNumber">81</div>
+                    <div class="driver-name" id="driverName">PIA</div>
+                </div>
+            </div>
+            <div class="status-box">
+                <div id="status" class="disconnected">
+                    <span id="statusIcon">⚠️</span>
+                    <span id="statusText">Connecting...</span>
+                    <span class="live-indicator" id="liveIndicator" style="display:none"></span>
+                </div>
+                <div class="stats" id="stats">Waiting for data...</div>
+            </div>
+        </div>
+        
+        <div class="metrics">
+            <div class="metric">
+                <div class="metric-value" id="speed" style="color: #00ff00;">0</div>
+                <div class="metric-label">Speed km/h</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="gear" style="color: #ffff00;">N</div>
+                <div class="metric-label">Gear</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="rpm" style="color: #ff9900;">0</div>
+                <div class="metric-label">RPM</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="engineTemp" style="color: #00ff00;">0</div>
+                <div class="metric-label">Engine °C</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="fuel" style="color: #00ccff;">0.0</div>
+                <div class="metric-label">Fuel Flow</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="drsStatus" style="color: #666;">
+                    <span id="drsText">OFF</span>
+                </div>
+                <div class="metric-label">DRS</div>
+            </div>
+        </div>
+        
+        <div class="dashboard">
+            <div id="speedChart" class="chart"></div>
+            <div id="pedalChart" class="chart"></div>
+            <div id="gearChart" class="chart"></div>
+            <div id="tyreChart" class="chart"></div>
+        </div>
+    </div>
+
+    <script>
+        const MAX_POINTS = 2500; // show last 5 seconds at 500Hz
+        const UPDATE_FREQUENCY = 25; // update graphs every 25 packets (20Hz refresh)
+        
+        let timeInSeconds = [];
+        let speeds = [];
+        let throttles = [];
+        let brakes = [];
+        let gears = [];
+        let rpms = [];
+        let tyreTemps = {
+            FL: [], FR: [], RL: [], RR: []
+        };
+        
+        let packetCount = 0;
+        let startTime = null;
+        let lastPacketTime = Date.now();
+        let reconnectAttempts = 0;
+        
+        const layout = {
+            paper_bgcolor: 'rgba(42, 42, 42, 0)',
+            plot_bgcolor: 'rgba(26, 26, 26, 0.5)',
+            font: { 
+                color: '#fff',
+                family: 'Segoe UI, Tahoma, sans-serif'
+            },
+            margin: { t: 40, r: 20, b: 40, l: 60 },
+            xaxis: { 
+                title: 'Time (s)', 
+                gridcolor: '#333',
+                showgrid: true,
+                range: [0, 5]
+            },
+            yaxis: { 
+                gridcolor: '#333',
+                showgrid: true 
+            },
+            height: 280,
+            showlegend: true,
+            legend: {
+                x: 0.02,
+                y: 0.98,
+                bgcolor: 'rgba(0,0,0,0)',
+                bordercolor: 'rgba(255,255,255,0.2)',
+                borderwidth: 1
+            }
+        };
+        
+        Plotly.newPlot('speedChart', [{
+            x: timeInSeconds,
+            y: speeds,
+            type: 'scatter',
+            name: 'Speed',
+            line: { color: '#00ff00', width: 2 }
+        }], {...layout, title: 'Speed (km/h)', yaxis: {...layout.yaxis, range: [0, 360]}});
+        
+        Plotly.newPlot('pedalChart', [
+            {
+                x: timeInSeconds,
+                y: throttles,
+                type: 'scatter',
+                name: 'Throttle',
+                line: { color: '#00ff00', width: 2 },
+                fill: 'tozeroy',
+                fillcolor: 'rgba(0,255,0,0.1)'
+            },
+            {
+                x: timeInSeconds,
+                y: brakes,
+                type: 'scatter',
+                name: 'Brake',
+                line: { color: '#ff0000', width: 2 },
+                fill: 'tozeroy',
+                fillcolor: 'rgba(255,0,0,0.1)'
+            }
+        ], {...layout, title: 'Pedal Input (%)', yaxis: {...layout.yaxis, range: [0, 100]}});
+        
+        Plotly.newPlot('gearChart', [{
+            x: timeInSeconds,
+            y: gears,
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Gear',
+            line: { color: '#ffff00', width: 3, shape: 'hv' }
+        }], {...layout, title: 'Gear Selection', yaxis: {...layout.yaxis, range: [-1, 9], dtick: 1}});
+        
+        Plotly.newPlot('tyreChart', [
+            { x: timeInSeconds, y: tyreTemps.FL, name: 'FL', line: { color: '#ff6600', width: 2 }},
+            { x: timeInSeconds, y: tyreTemps.FR, name: 'FR', line: { color: '#ff9900', width: 2 }},
+            { x: timeInSeconds, y: tyreTemps.RL, name: 'RL', line: { color: '#0099ff', width: 2 }},
+            { x: timeInSeconds, y: tyreTemps.RR, name: 'RR', line: { color: '#00ccff', width: 2 }}
+        ], {...layout, title: 'Tyre Temperatures (°C)', yaxis: {...layout.yaxis, range: [60, 120]}});
+        
+        let ws;
+        
+        function connectWebSocket() {
+            ws = new WebSocket('ws://127.0.0.1:8080/ws');
+            
+            ws.onopen = () => {
+                document.getElementById('status').className = 'connected';
+                document.getElementById('statusIcon').textContent = '✅';
+                document.getElementById('statusText').textContent = 'Live Data';
+                document.getElementById('liveIndicator').style.display = 'inline-block';
+                console.log('WebSocket connected');
+                reconnectAttempts = 0;
+            };
+            
+            ws.onclose = () => {
+                document.getElementById('status').className = 'disconnected';
+                document.getElementById('statusIcon').textContent = '❌';
+                document.getElementById('statusText').textContent = 'Disconnected';
+                document.getElementById('liveIndicator').style.display = 'none';
+                console.log('WebSocket disconnected');
+                
+                // Auto-reconnect with exponential backoff
+                if (reconnectAttempts < 5) {
+                    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000);
+                    reconnectAttempts++;
+                    console.log(`Reconnecting in ${delay}ms... (attempt ${reconnectAttempts})`);
+                    setTimeout(connectWebSocket, delay);
+                }
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                packetCount++;
+                lastPacketTime = Date.now();
+                
+                if (data.driver) {
+                    document.getElementById('driverName').textContent = data.driver;
+                }
+                if (data.car_number) {
+                    document.getElementById('carNumber').textContent = data.car_number;
+                }
+                
+                if (startTime === null) {
+                    startTime = data.timestamp;
+                }
+                
+                const currentTime = (data.timestamp - startTime) / 1000.0;
+                
+                document.getElementById('speed').textContent = data.speed;
+                document.getElementById('gear').textContent = data.gear > 0 ? data.gear : (data.gear === 0 ? 'N' : 'R');
+                document.getElementById('rpm').textContent = data.rpm;
+                document.getElementById('engineTemp').textContent = data.engine_temp;
+                document.getElementById('fuel').textContent = data.fuel_flow.toFixed(1);
+                
+                const drsElement = document.getElementById('drsStatus');
+                const drsText = document.getElementById('drsText');
+                if (data.drs) {
+                    drsText.textContent = 'ACTIVE';
+                    drsElement.style.color = '#00ff00';
+                } else {
+                    drsText.textContent = 'OFF';
+                    drsElement.style.color = '#666';
+                }
+                
+                const tempEl = document.getElementById('engineTemp');
+                if (data.engine_temp > 120) {
+                    tempEl.style.color = '#ff0000';
+                } else if (data.engine_temp > 110) {
+                    tempEl.style.color = '#ffaa00';
+                } else {
+                    tempEl.style.color = '#00ff00';
+                }
+                
+                const rpmEl = document.getElementById('rpm');
+                const rpmPercent = data.rpm / 12000;
+                if (rpmPercent > 0.95) {
+                    rpmEl.style.color = '#ff0000';
+                } else if (rpmPercent > 0.85) {
+                    rpmEl.style.color = '#ff9900';
+                } else {
+                    rpmEl.style.color = '#00ff00';
+                }
+                
+                timeInSeconds.push(currentTime);
+                speeds.push(data.speed);
+                throttles.push(data.throttle * 100);
+                brakes.push(data.brake * 100);
+                gears.push(data.gear);
+                rpms.push(data.rpm);
+                
+                if (data.tyre_temps && data.tyre_temps.length >= 4) {
+                    tyreTemps.FL.push(data.tyre_temps[0]);
+                    tyreTemps.FR.push(data.tyre_temps[1]);
+                    tyreTemps.RL.push(data.tyre_temps[2]);
+                    tyreTemps.RR.push(data.tyre_temps[3]);
+                }
+                
+                if (timeInSeconds.length > MAX_POINTS) {
+                    timeInSeconds.shift();
+                    speeds.shift();
+                    throttles.shift();
+                    brakes.shift();
+                    gears.shift();
+                    rpms.shift();
+                    tyreTemps.FL.shift();
+                    tyreTemps.FR.shift();
+                    tyreTemps.RL.shift();
+                    tyreTemps.RR.shift();
+                }
+                
+                document.getElementById('stats').textContent = 
+                    `${packetCount} packets | ${currentTime.toFixed(1)}s | ${(packetCount/currentTime).toFixed(0)} pps`;
+                
+
+                if (packetCount % UPDATE_FREQUENCY === 0) {
+                    const windowStart = Math.max(0, currentTime - 5);
+                    const windowEnd = currentTime;
+                    
+                    Plotly.update('speedChart', 
+                        {x: [timeInSeconds], y: [speeds]},
+                        {xaxis: {...layout.xaxis, range: [windowStart, windowEnd]}}
+                    );
+                    
+                    Plotly.update('pedalChart', 
+                        {x: [timeInSeconds, timeInSeconds], y: [throttles, brakes]},
+                        {xaxis: {...layout.xaxis, range: [windowStart, windowEnd]}}
+                    );
+                    
+                    Plotly.update('gearChart', 
+                        {x: [timeInSeconds], y: [gears]},
+                        {xaxis: {...layout.xaxis, range: [windowStart, windowEnd]}}
+                    );
+                    
+                    Plotly.update('tyreChart', 
+                        {x: [timeInSeconds, timeInSeconds, timeInSeconds, timeInSeconds],
+                         y: [tyreTemps.FL, tyreTemps.FR, tyreTemps.RL, tyreTemps.RR]},
+                        {xaxis: {...layout.xaxis, range: [windowStart, windowEnd]}}
+                    );
+                }
+            };
+        }
+        
+        // Start WebSocket connection
+        connectWebSocket();
+        
+        // Monitor connection health
+        setInterval(() => {
+            if (Date.now() - lastPacketTime > 10000 && ws.readyState === WebSocket.OPEN) {
+                console.log('No data for 10s, reconnecting...');
+                ws.close();
+            }
+        }, 5000);
+    </script>
+</body>
+</html>
