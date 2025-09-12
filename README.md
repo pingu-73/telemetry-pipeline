@@ -5,6 +5,8 @@ High performance telemetry processing pipeline that simulates Formula 1's real t
 ## Overview
 It recreates telemetry pipeline used by F1 teams, processing frequency's from sensor data from race cars and making real-time strategy decisions. It demonstrates the engineering challenges of handling massive data streams under strict latency constraints.
 
+![Demo](assets/demo.gif)
+
 ## Key Features
 - **Telemetry streaming** at 500Hz 
 - **Sub-10ms processing latency** with packet drop simulation
