@@ -11,7 +11,7 @@ impl<'a> TelemetryDecoder<'a> {
     pub fn new(data: &'a [u8]) -> Self {
         Self { data, cursor: 0 }
     }
-    
+
     /// read MessagePack format marker
     fn read_marker(&mut self) -> Result<u8, &'static str> {
         if self.cursor >= self.data.len() {
@@ -21,18 +21,18 @@ impl<'a> TelemetryDecoder<'a> {
         self.cursor += 1;
         Ok(marker)
     }
-    
+
     /// skip a field without deserializing
     fn skip_field(&mut self) -> Result<(), &'static str> {
         let marker = self.read_marker()?;
-        
+
         match marker {
             // +ve fixint (0x00-0x7f)
             0x00..=0x7f => Ok(()),
             // Fixmap (0x80-0x8f)
             0x80..=0x8f => {
                 let len = (marker & 0x0f) as usize;
-                for _ in 0..len*2 {
+                for _ in 0..len * 2 {
                     self.skip_field()?;
                 }
                 Ok(())
@@ -111,14 +111,14 @@ impl<'a> TelemetryDecoder<'a> {
             }
             // -ve fixint (0xe0-0xff)
             0xe0..=0xff => Ok(()),
-            _ => Err("Unknown MessagePack marker")
+            _ => Err("Unknown MessagePack marker"),
         }
     }
-    
+
     /// read u64 directly from bytes
     pub fn read_u64(&mut self) -> Result<u64, &'static str> {
         let marker = self.read_marker()?;
-        
+
         match marker {
             // +ve fixint
             0x00..=0x7f => Ok(marker as u64),
@@ -130,10 +130,7 @@ impl<'a> TelemetryDecoder<'a> {
             }
             // uint16
             0xcd => {
-                let val = u16::from_be_bytes([
-                    self.data[self.cursor],
-                    self.data[self.cursor + 1]
-                ]);
+                let val = u16::from_be_bytes([self.data[self.cursor], self.data[self.cursor + 1]]);
                 self.cursor += 2;
                 Ok(val as u64)
             }
@@ -143,7 +140,7 @@ impl<'a> TelemetryDecoder<'a> {
                     self.data[self.cursor],
                     self.data[self.cursor + 1],
                     self.data[self.cursor + 2],
-                    self.data[self.cursor + 3]
+                    self.data[self.cursor + 3],
                 ]);
                 self.cursor += 4;
                 Ok(val as u64)
@@ -158,58 +155,55 @@ impl<'a> TelemetryDecoder<'a> {
                     self.data[self.cursor + 4],
                     self.data[self.cursor + 5],
                     self.data[self.cursor + 6],
-                    self.data[self.cursor + 7]
+                    self.data[self.cursor + 7],
                 ]);
                 self.cursor += 8;
                 Ok(val)
             }
-            _ => Err("Expected integer")
+            _ => Err("Expected integer"),
         }
     }
-    
+
     /// read u16 without allocation
     pub fn read_u16(&mut self) -> Result<u16, &'static str> {
         let val = self.read_u64()?;
         Ok(val as u16)
     }
-    
+
     /// read priority field
     pub fn read_priority(&mut self) -> Result<u8, &'static str> {
         let val = self.read_u64()?;
         Ok(val as u8)
     }
-    
+
     /// navigate to specific field in map without full deserialization
     pub fn find_field(&mut self, target_key: &str) -> Result<bool, &'static str> {
         // reset to start for simplicity
         self.cursor = 0;
-        
+
         // read map header
         let marker = self.read_marker()?;
         let map_len = match marker {
             0x80..=0x8f => (marker & 0x0f) as usize,
             0xde => {
-                let len = u16::from_be_bytes([
-                    self.data[self.cursor],
-                    self.data[self.cursor + 1]
-                ]);
+                let len = u16::from_be_bytes([self.data[self.cursor], self.data[self.cursor + 1]]);
                 self.cursor += 2;
                 len as usize
             }
-            _ => return Err("Not a map")
+            _ => return Err("Not a map"),
         };
-        
+
         // scan through map entries
         for _ in 0..map_len {
             // check if this key matches
             let key_start = self.cursor;
             let key_marker = self.data[self.cursor];
-            
+
             if key_marker >= 0xa0 && key_marker <= 0xbf {
                 // fixstr
                 let key_len = (key_marker & 0x1f) as usize;
                 self.cursor += 1;
-                
+
                 if key_len == target_key.len() {
                     let key_bytes = &self.data[self.cursor..self.cursor + key_len];
                     if key_bytes == target_key.as_bytes() {
@@ -219,13 +213,13 @@ impl<'a> TelemetryDecoder<'a> {
                 }
                 self.cursor = key_start;
             }
-            
+
             // skip this key
             self.skip_field()?;
             // skip the value
             self.skip_field()?;
         }
-        
+
         Ok(false)
     }
 }
@@ -248,13 +242,13 @@ impl<'a> FastTelemetry<'a> {
             speed: None,
         }
     }
-    
+
     /// get packet ID with lazy parsing
     pub fn packet_id(&mut self) -> Result<u32, &'static str> {
         if let Some(id) = self.packet_id {
             return Ok(id);
         }
-        
+
         if self.decoder.find_field("id")? {
             let id = self.decoder.read_u64()? as u32;
             self.packet_id = Some(id);
@@ -263,13 +257,13 @@ impl<'a> FastTelemetry<'a> {
             Err("Packet ID field not found")
         }
     }
-    
+
     /// get priority with lazy parsing
     pub fn priority(&mut self) -> Result<u8, &'static str> {
         if let Some(p) = self.priority {
             return Ok(p);
         }
-        
+
         if self.decoder.find_field("p")? {
             let p = self.decoder.read_priority()?;
             self.priority = Some(p);
@@ -278,13 +272,13 @@ impl<'a> FastTelemetry<'a> {
             Ok(1) // default priority
         }
     }
-    
+
     /// get speed with lazy parsing (for load simulation)
     pub fn speed(&mut self) -> Result<u16, &'static str> {
         if let Some(spd) = self.speed {
             return Ok(spd);
         }
-        
+
         if self.decoder.find_field("spd")? {
             let spd = self.decoder.read_u16()?;
             self.speed = Some(spd);
@@ -294,7 +288,6 @@ impl<'a> FastTelemetry<'a> {
         }
     }
 }
-
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TelemetryPacket {

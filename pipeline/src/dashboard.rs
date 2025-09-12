@@ -1,6 +1,6 @@
 //! Real-time telemetry dashboard server
 use axum::{
-    extract::ws::{WebSocket, WebSocketUpgrade, Message},
+    extract::ws::{Message, WebSocket, WebSocketUpgrade},
     response::{Html, IntoResponse},
     routing::get,
     Router,
@@ -40,8 +40,8 @@ impl From<&crate::telemetry::TelemetryPacket> for DashboardData {
             engine_temp: packet.h2ot,
             tyre_temps: packet.tt.clone(),
             lap_distance: 0.0,
-            car_number: 81,  // TODO: Hardcoded
-            driver: "PIA".to_string(),  // TODO: Hardcoded
+            car_number: 81,            // TODO: Hardcoded
+            driver: "PIA".to_string(), // TODO: Hardcoded
         }
     }
 }
@@ -55,9 +55,9 @@ pub async fn start_dashboard(tx: broadcast::Sender<DashboardData>) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:8080")
         .await
         .unwrap();
-    
+
     println!(" [DASHBOARD] F1 Telemetry Dashboard: http://127.0.0.1:8080");
-    
+
     axum::serve(listener, app).await.unwrap();
 }
 
@@ -74,9 +74,9 @@ async fn websocket_handler(
 
 async fn handle_socket(mut socket: WebSocket, tx: broadcast::Sender<DashboardData>) {
     let mut rx = tx.subscribe();
-    
+
     let mut ping_interval = interval(Duration::from_secs(30));
-    
+
     loop {
         tokio::select! {
             Ok(data) = rx.recv() => {

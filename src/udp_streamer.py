@@ -4,7 +4,6 @@ from collections import deque
 import statistics
 
 from data_source import F1DataSource
-from telemetry_packet import F1TelemetryPacket, PacketPriority
 from config import *
 
 class UDPTelemetryStreamer:
@@ -116,7 +115,7 @@ class UDPTelemetryStreamer:
         
         packet_loss_rate = (self.packets_dropped / max(self.packets_sent, 1)) * 100
         
-        lap_info = f" | Lap {self.current_lap}/{self.total_laps}" if self.total_laps > 0 else ""
+        _lap_info = f" | Lap {self.current_lap}/{self.total_laps}" if self.total_laps > 0 else ""
 
         print("\n[METRICS] Telemetry Performance:")
         print(f"  Packets sent: {self.packets_sent:,}")
