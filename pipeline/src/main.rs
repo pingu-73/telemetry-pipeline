@@ -26,14 +26,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", "=".repeat(70));
     println!("\nSimulating real F1 pit wall processing systems");
     println!("Requirements: <10ms latency, <0.1% packet loss");
-    println!("\nFeatures:");
-    println!("  • Realistic processing delays (0.1-5ms)");
-    println!("  • Occasional processing spikes (simulating CPU load)");
-    println!("  • Network packet corruption simulation");
-    println!("  • Automatic shutdown after {}s inactivity", INACTIVITY_TIMEOUT_SECS);
+    println!("Automatic shutdown after {}s inactivity", INACTIVITY_TIMEOUT_SECS);
     println!("{}", "=".repeat(70));
     
-    // parse command line args
     let args: Vec<String> = std::env::args().collect();
     let simulate_load = !args.contains(&"--no-simulation".to_string());
     
@@ -41,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("\n[MODE] Running in ideal mode (--no-simulation flag detected)");
     } else {
         println!("\n[MODE] Running with realistic load simulation");
-        println!("[INFO] Expect to see some packet drops and higher latencies!");
+        println!("[INFO] Using zero-copy decoding for maximum performance");
     }
     
     let metrics = Arc::new(RwLock::new(Metrics::new()));
@@ -61,7 +56,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n[UDP] Listening on port {}", UDP_PORT);
     println!("[INFO] Waiting for telemetry stream...\n");
     
-    // spawn metrics printer
     let metrics_handle = tokio::spawn(async move {
         let mut interval = interval(Duration::from_secs(2));
         loop {
@@ -76,9 +70,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let shutdown = signal::ctrl_c();
     tokio::pin!(shutdown);
     
-    
     let mut buffer = vec![0u8; BUFFER_SIZE];
     let mut decisions_made = 0u64;
+    let mut dashboard_counter = 0u32;
     
     loop {
         tokio::select! {
@@ -91,17 +85,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                            socket.recv_from(&mut buffer)) => {
                 match result {
                     Ok(Ok((len, _addr))) => {
-                        
-                        // update received metrics
                         {
                             let mut m = metrics.write().await;
                             m.packets_received += 1;
                             m.bytes_received += len as u64;
                         }
                         
-                        // decode packet (may fail due to corruption)
-                        let packet = match decoder.decode(&buffer[..len]) {
-                            Ok(p) => p,
+                        // raw bytes for zero-copy processing
+                        let raw_data = match decoder.decode_raw(&buffer[..len]) {
+                            Ok(d) => d,
                             Err(e) => {
                                 if decisions_made % 100 == 0 {
                                     eprintln!("❌ [CORRUPT] {}", e);
@@ -112,25 +104,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         };
                         
-                        // process packet with latency guarantee
-                        match processor.process_packet(packet.clone()).await {
+                        match processor.process_packet_zero_copy(raw_data.clone()).await {
                             Ok(_) => {
-                                // send telemetry to dashboard
-                                let dashboard_data = DashboardData::from(&packet);
-                                let _ = dashboard_tx.send(dashboard_data);
+                                // only deserialize for dashboard every Nth packet
+                                dashboard_counter += 1;
+                                if dashboard_counter % 10 == 0 {  // send 1/10th to dashboard
+                                    if let Ok(packet) = decoder.decode_full(&raw_data) {
+                                        let dashboard_data = DashboardData::from(&packet);
+                                        let _ = dashboard_tx.send(dashboard_data);
+                                    }
+                                }
                                 
-                                // Show performance stats periodically
                                 if decisions_made % 5000 == 0 {
                                     let (used, capacity) = processor.buffer_stats();
-                                    println!("  [BUFFER] {}/{} slots | {} packets processed", 
+                                    println!("  [BUFFER] {}/{} slots | {} packets (zero-copy)", 
                                         used, capacity, decisions_made);
                                 }
                                 
                                 decisions_made += 1;
                             }
                             Err(e) => {
-                                // Packet dropped due to latency
-                                if decisions_made % 10 == 0 {  // Show more drops
+                                if decisions_made % 10 == 0 {
                                     eprintln!("⏱️  [DROP] {}", e);
                                 }
                             }
@@ -158,13 +152,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let final_metrics = metrics.read().await;
     final_metrics.print_summary();
     
-
     let (_, _, p99_ms) = final_metrics.latency_stats();
     let loss_rate = final_metrics.packet_loss_rate();
     
     println!("\n  PERFORMANCE ASSESSMENT:");
     if p99_ms < 10.0 && loss_rate < 0.1 {
         println!("✅ System meets requirements!");
+        println!("   • P99 latency: {:.2}ms < 10ms", p99_ms);
+        println!("   • Packet loss: {:.3}% < 0.1%", loss_rate);
     } else {
         println!("❌ System does NOT meet requirements:");
         if p99_ms >= 10.0 {
