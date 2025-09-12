@@ -8,7 +8,7 @@ It recreates telemetry pipeline used by F1 teams, processing frequency's from se
 ## Key Features
 - **Telemetry streaming** at 500Hz 
 - **Sub-10ms processing latency** with packet drop simulation
-- **Zero-copy data processing** in Rust for maximum performance (todo)
+- **Zero-copy data processing** in Rust for maximum performance ([zero-copy pipeline](https://github.com/pingu-73/telemetry-pipeline/tree/zero-copy))
 - **Live dashboard** showing telemetry visualization
 
 ## Performance Metrics
