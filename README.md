@@ -1,18 +1,17 @@
 # F1 Telemetry Pipeline Simulator
 
-High performance telemetry processing pipeline that simulates Formula 1's real time data systems, demonstrating how teams process 1.5TB of race weekend data with sub 10ms latency requirement.
+A High performance telemetry processing pipeline that tries to mirror the real time data pipelines used by Formula 1 teams. Processes sensor data at 500Hz with <10ms latency  meeting the actual performance requirements of F1 pit wall systems.
 
 ## Overview
-It recreates telemetry pipeline used by F1 teams, processing frequency's from sensor data from race cars and making real-time strategy decisions. It demonstrates the engineering challenges of handling massive data streams under strict latency constraints.
+It recreates telemetry pipeline used by F1 teams, processing frequencies from sensor data from race cars and making real-time strategy decisions. It demonstrates the engineering challenges of handling massive data streams under strict latency constraints.
 
 ![Demo](assets/demo.gif)
 
 ## Key Features
-- **Telemetry streaming** at 500Hz 
-- **Sub-10ms processing latency** with packet drop simulation
-- **Zero-copy data processing** in Rust for maximum performance
-- **Lazy field parsing**
-- **Live dashboard** showing telemetry visualization
+1. **Data Upsampling:** F1's historical data (8Hz) interpolated to realistic sensor rates (500Hz) while preserving signal characteristics
+2. **Zero-Copy Processing:** Eliminated deserialization overhead using custom MessagePack decoder
+3. **Backpressure Handling:** Ring buffer with packet prioritization prevents system overload
+4. **Jitter Minimization:** Microsecond-precision timing maintains consistent packet intervals
 
 ## Performance Metrics
 
@@ -30,7 +29,7 @@ It recreates telemetry pipeline used by F1 teams, processing frequency's from se
 cd pipeline
 cargo run --release -- --no-simulation
 ```
-> Note: It stops after 5 sec of not recieveing any data.
+> Note: It stops after 5 sec of not receiving any data.
 
 ### Terminal 2: Start Python telemetry stream
 ```bash
@@ -42,6 +41,13 @@ uv run src/main.py
 ```bash
 open http://localhost:8080
 ```
+
+## Config
+Edit `src/config.py` to adjust:
+- Target car number (default: 81 - Oscar Piastri)
+- Streaming frequency (default: 500Hz)
+- Max latency threshold (default: 10ms)
+- Number of laps to stream (default: Complete Race)
 
 ## System Design
 ```mermaid
@@ -97,7 +103,7 @@ sequenceDiagram
 |Speed, RPM       |Linear      |Smooth Transition|
 |Gear             |Forward Fill|Discrete Fill|
 |Position (x,y,z) |Quadratic   |Natural Motion Curves|
-|Break            |Forward Fill|Binary State|
+|Brake            |Forward Fill|Binary State|
 
 ## Performance Optimizations
 1. **Non blocking sockets:** Prevents buffer overflow
@@ -132,13 +138,24 @@ f1-telemetry-pipeline/
 └── f1_cache/               # FastF1 data cache
 ```
 
-## Config
-Edit `src/config.py` to adjust:
-- Target car number (default: 81 - Oscar Piastri)
-- Streaming frequency (default: 500Hz)
-- Max latency threshold (default: 10ms)
-- Number of laps to stream (default: Complete Race)
+## Why This Matters
 
+During a race weekend, F1 teams process:
+- **300+ sensors** per car generating data at up to 1kHz
+- **1.5TB of telemetry data** per weekend
+- **Real-time decisions** that can win or lose races
+
+This pipeline demonstrates understanding of:
+- Latency constraints
+- Handling burst traffic during critical events (braking zones, DRS activation)
+- Priority-based processing for safety-critical data
+
+## Future Enhancements
+
+- [ ] Multi-car telemetry processing (full grid simulation)
+- [ ] Machine learning for predictive tire degradation
+- [ ] Integration with weather data for strategy optimization
+- [ ] Replay capability for post-race analysis
 -----
 ## Tech Used
 - **MessagePack:** Efficient binary serialization
