@@ -24,13 +24,13 @@ It recreates telemetry pipeline used by F1 teams, processing frequencies from se
 
 
 ## Running the Pipeline
-### 1. Terminal 1:  Start Rust processor
+### 1. Terminal 1:  Start Collector & Rust processor
 ```bash
 docker compose up -d # to start open telemetery collector
 cd pipeline
 cargo run --release -- --no-simulation
 ```
-> Note: It stops after 5 sec of not receiving any data.
+> Note: The Rust backend now listens for OTLP metrics on `:8080/v1/metrics`.
 
 ### Terminal 2: Start Python telemetry stream
 ```bash
@@ -42,6 +42,11 @@ uv run src/main.py
 ```bash
 open http://localhost:8080
 ```
+
+### Verification
+- **Dashboard**: Open `http://localhost:8080` to see real-time car telemetry via WebSockets.
+- **Observability**: Look for `[OTEL-SINK]` logs in Terminal 1. This confirms the Collector is successfully forwarding metrics to the Rust sink.
+- **Collector Logs**: Run `docker logs -f otel-collector` to see the gRPC-to-HTTP translation in action.
 
 ### Open Telemetery Collector
 On terminal-1:
