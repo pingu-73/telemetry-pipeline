@@ -32,6 +32,7 @@ def main():
         print("\n\n[STOP] Stream interrupted")
     finally:
         streamer.close()
+        streamer.otel.shutdown()
     
     print("\n[COMPLETE] Working Perfectly")
 

@@ -8,6 +8,9 @@ dependencies = [
     "fastf1>=3.6.1",
     "msgpack>=1.1.1",
     "numpy>=2.3.3",
+    "opentelemetry-api>=1.40.0",
+    "opentelemetry-exporter-otlp>=1.40.0",
+    "opentelemetry-sdk>=1.40.0",
     "pandas>=2.3.2",
     "python-dotenv>=1.1.1",
 ]

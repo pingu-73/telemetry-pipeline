@@ -5,6 +5,7 @@ import statistics
 
 from data_source import F1DataSource
 from config import *
+from oltp_opentele import OpenTele
 
 class UDPTelemetryStreamer:
     def __init__(self, target_ip: str = '127.0.0.1', target_port: int = UDP_PORT):
@@ -26,6 +27,9 @@ class UDPTelemetryStreamer:
         # latency tracking
         self.latencies_us = deque(maxlen=1000)  # microseconds
         
+        # Open Tele matrix
+        self.otel = OpenTele()
+
         print(f"[UDP] Streamer initialized -> {target_ip}:{target_port}")
         print("[UDP] Simulating telemetry")
         print(f"[UDP] Target: {BASE_FREQUENCY_HZ}Hz, <{MAX_LATENCY_MS}ms latency")
@@ -64,18 +68,29 @@ class UDPTelemetryStreamer:
                 # latency in microseconds
                 send_latency_us = (time.perf_counter() - send_start) * 1_000_000
                 self.latencies_us.append(send_latency_us)
+
+                # Open Tele record send latency
+                self.otel.histogram_latency.record(send_latency_us)
                 
                 # check exceed latency requirement
                 if send_latency_us > MAX_LATENCY_MS * 1000:
                     self.packets_dropped += 1
+                    self.otel.counter_dropped.add(1)
                     print(f"[WARN] Packet {packet.packet_id} dropped - "f"latency {send_latency_us/1000:.2f}ms > {MAX_LATENCY_MS}ms limit")
                 
                 self.packets_sent += 1
                 self.bytes_sent += len(packet_bytes)
                 
+                # Open Tele record counters
+                self.otel.counter_packets.add(1)
+                self.otel.counter_bytes.add(len(packet_bytes))
+                # Open Tele record car speed
+                self.otel.gauge_speed.set(packet.speed_kmh)
+
             except BlockingIOError:
                 # socket buffer full -> packet loss
                 self.packets_dropped += 1
+                self.otel.counter_dropped.add(1)
                 print(f"[WARN] Packet {packet.packet_id} dropped - buffer full")
             
             if realtime and not first_packet:  # skip for first packet
@@ -114,7 +129,14 @@ class UDPTelemetryStreamer:
             avg_latency_ms = p99_latency_ms = 0
         
         packet_loss_rate = (self.packets_dropped / max(self.packets_sent, 1)) * 100
-        
+
+        # Open Tele gauge update        
+        self.otel.gauge_throughput.set(pps)
+        self.otel.gauge_throughput_mbps.set(mbps)
+        self.otel.gauge_latency_avg.set(avg_latency_ms)
+        self.otel.gauge_latency_p99.set(p99_latency_ms)
+        self.otel.gauge_loss_rate.set(packet_loss_rate)
+
         _lap_info = f" | Lap {self.current_lap}/{self.total_laps}" if self.total_laps > 0 else ""
 
         print("\n[METRICS] Telemetry Performance:")
