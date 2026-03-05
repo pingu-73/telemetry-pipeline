@@ -17,7 +17,7 @@ use tokio::time::{interval, timeout, Duration};
 
 const UDP_PORT: u16 = 20777;
 const BUFFER_SIZE: usize = 2048;
-const INACTIVITY_TIMEOUT_SECS: u64 = 5;
+const INACTIVITY_TIMEOUT_SECS: u64 = 60;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

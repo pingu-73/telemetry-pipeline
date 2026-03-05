@@ -7,6 +7,11 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 exporters:
+  otlphttp/rust: # exportin to rust pipeline via oltp/http (json)
+    endpoint: http://host.docker.internal:8080
+    encoding: json
+    compression: none
+
   debug:
     verbosity: detailed
 
@@ -14,4 +19,4 @@ service:
   pipelines:
     metrics:
       receivers: [otlp]
-      exporters: [debug]
+      exporters: [otlphttp/rust, debug]
