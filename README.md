@@ -42,6 +42,21 @@ uv run src/main.py
 open http://localhost:8080
 ```
 
+### Open Telemetery Collector
+On terminal-1:
+```
+# start the collector service
+docker compose up -d
+
+# watch the live metric stream
+docker logs -f otel-collector
+```
+
+On terminal-2, start python sender:
+```
+uv run src/main.py
+```
+
 ## Config
 Edit `src/config.py` to adjust:
 - Target car number (default: 81 - Oscar Piastri)
