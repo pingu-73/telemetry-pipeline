@@ -26,6 +26,7 @@ It recreates telemetry pipeline used by F1 teams, processing frequencies from se
 ## Running the Pipeline
 ### 1. Terminal 1:  Start Rust processor
 ```bash
+docker compose up -d # to start open telemetery collector
 cd pipeline
 cargo run --release -- --no-simulation
 ```
@@ -44,7 +45,7 @@ open http://localhost:8080
 
 ### Open Telemetery Collector
 On terminal-1:
-```
+```bash
 # start the collector service
 docker compose up -d
 
@@ -53,7 +54,7 @@ docker logs -f otel-collector
 ```
 
 On terminal-2, start python sender:
-```
+```bash
 uv run src/main.py
 ```
 
