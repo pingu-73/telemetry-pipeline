@@ -34,7 +34,7 @@ cargo run --release -- --no-simulation
 
 ### Terminal 2: Start Python telemetry stream
 ```bash
-pip install -r requirements.txt
+uv sync
 uv run src/main.py
 ```
 
