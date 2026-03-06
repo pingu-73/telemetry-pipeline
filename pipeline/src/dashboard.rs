@@ -1,16 +1,15 @@
 //! Real-time telemetry dashboard server
 use axum::{
-    body::{to_bytes, Body},
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
-    http::{Request, StatusCode},
     response::{Html, IntoResponse},
     routing::{get, post},
     Router,
 };
 use serde::Serialize;
-use serde_json::Value;
 use tokio::sync::broadcast;
 use tokio::time::{interval, Duration};
+
+use crate::open_tele_sink::{self, OtelStoreHandle};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DashboardData {
@@ -49,18 +48,32 @@ impl From<&crate::telemetry::TelemetryPacket> for DashboardData {
     }
 }
 
-pub async fn start_dashboard(tx: broadcast::Sender<DashboardData>) {
+#[derive(Clone)]
+pub struct AppState {
+    pub telemetry_tx: broadcast::Sender<DashboardData>,
+    pub otel_store: OtelStoreHandle,
+}
+
+pub async fn start_dashboard(tx: broadcast::Sender<DashboardData>, otel_store: OtelStoreHandle) {
+    let state = AppState {
+        telemetry_tx: tx,
+        otel_store: otel_store.clone(),
+    };        
+
     let app = Router::new()
         .route("/", get(index))
         .route("/ws", get(websocket_handler))
-        .route("/v1/metrics", post(metrics_handler))
-        .with_state(tx);
+        .route("/v1/metrics", post(open_tele_sink::metrics_post_handler))
+        .route("/otel", get(open_tele_sink::otel_dashboard_handler))
+        .route("/otel/api/metrics", get(open_tele_sink::otel_api_handler))
+        .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080")
         .await
         .unwrap();
 
     println!(" [DASHBOARD] F1 Telemetry Dashboard: http://0.0.0.0:8080");
+    println!(" [DASHBOARD] OTel Metrics Page:      http://0.0.0.0:8080/otel");
 
     axum::serve(listener, app).await.unwrap();
 }
@@ -71,9 +84,9 @@ async fn index() -> Html<&'static str> {
 
 async fn websocket_handler(
     ws: WebSocketUpgrade,
-    axum::extract::State(tx): axum::extract::State<broadcast::Sender<DashboardData>>,
+    axum::extract::State(state): axum::extract::State<AppState>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(|socket| handle_socket(socket, tx))
+    ws.on_upgrade(|socket| handle_socket(socket, state.telemetry_tx))
 }
 
 async fn handle_socket(mut socket: WebSocket, tx: broadcast::Sender<DashboardData>) {
@@ -97,25 +110,3 @@ async fn handle_socket(mut socket: WebSocket, tx: broadcast::Sender<DashboardDat
         }
     }
 }
-
-async fn metrics_handler(req: Request<Body>) -> impl IntoResponse {
-    let content_type = req
-        .headers()
-        .get("content-type")
-        .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| "unknown".to_string());
-
-    let body_bytes = match to_bytes(req.into_body(), 1024 * 1024).await {
-        Ok(b) => b,
-        Err(_) => return StatusCode::BAD_REQUEST,
-    };
-
-    if let Ok(_json) = serde_json::from_slice::<Value>(&body_bytes) {
-        println!(" [OTEL-SINK] Received OTLP metrics batch ({} bytes, type: {})", body_bytes.len(), content_type);
-    } else {
-        println!(" [OTEL-SINK] Warning: Received non-JSON payload on metrics endpoint");
-    }
-
-    StatusCode::OK
-}    
