@@ -1,11 +1,13 @@
 //! F1 Telemetry Processing Pipeline
 mod dashboard;
 mod metrics;
+mod open_tele_sink;
 mod processor;
 mod telemetry;
 
 use dashboard::DashboardData;
 use metrics::Metrics;
+use open_tele_sink::OtelStore;
 use processor::{PacketDecoder, TelemetryProcessor};
 use tokio::sync::broadcast;
 
@@ -17,7 +19,7 @@ use tokio::time::{interval, timeout, Duration};
 
 const UDP_PORT: u16 = 20777;
 const BUFFER_SIZE: usize = 2048;
-const INACTIVITY_TIMEOUT_SECS: u64 = 5;
+const INACTIVITY_TIMEOUT_SECS: u64 = 60;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -48,8 +50,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (dashboard_tx, _) = broadcast::channel::<DashboardData>(100);
     let dashboard_tx_clone = dashboard_tx.clone();
 
+    let otel_store = OtelStore::new_handle();
+
     tokio::spawn(async move {
-        dashboard::start_dashboard(dashboard_tx_clone).await;
+        dashboard::start_dashboard(dashboard_tx_clone, otel_store).await;
     });
 
     let mut processor = TelemetryProcessor::new(Arc::clone(&metrics), simulate_load);

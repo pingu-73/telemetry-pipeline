@@ -2,12 +2,14 @@
 use axum::{
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     response::{Html, IntoResponse},
-    routing::get,
+    routing::{get, post},
     Router,
 };
 use serde::Serialize;
 use tokio::sync::broadcast;
 use tokio::time::{interval, Duration};
+
+use crate::open_tele_sink::{self, OtelStoreHandle};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DashboardData {
@@ -46,17 +48,32 @@ impl From<&crate::telemetry::TelemetryPacket> for DashboardData {
     }
 }
 
-pub async fn start_dashboard(tx: broadcast::Sender<DashboardData>) {
+#[derive(Clone)]
+pub struct AppState {
+    pub telemetry_tx: broadcast::Sender<DashboardData>,
+    pub otel_store: OtelStoreHandle,
+}
+
+pub async fn start_dashboard(tx: broadcast::Sender<DashboardData>, otel_store: OtelStoreHandle) {
+    let state = AppState {
+        telemetry_tx: tx,
+        otel_store: otel_store.clone(),
+    };        
+
     let app = Router::new()
         .route("/", get(index))
         .route("/ws", get(websocket_handler))
-        .with_state(tx);
+        .route("/v1/metrics", post(open_tele_sink::metrics_post_handler))
+        .route("/otel", get(open_tele_sink::otel_dashboard_handler))
+        .route("/otel/api/metrics", get(open_tele_sink::otel_api_handler))
+        .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:8080")
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:8080")
         .await
         .unwrap();
 
-    println!(" [DASHBOARD] F1 Telemetry Dashboard: http://127.0.0.1:8080");
+    println!(" [DASHBOARD] F1 Telemetry Dashboard: http://0.0.0.0:8080");
+    println!(" [DASHBOARD] OTel Metrics Page:      http://0.0.0.0:8080/otel");
 
     axum::serve(listener, app).await.unwrap();
 }
@@ -67,9 +84,9 @@ async fn index() -> Html<&'static str> {
 
 async fn websocket_handler(
     ws: WebSocketUpgrade,
-    axum::extract::State(tx): axum::extract::State<broadcast::Sender<DashboardData>>,
+    axum::extract::State(state): axum::extract::State<AppState>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(|socket| handle_socket(socket, tx))
+    ws.on_upgrade(|socket| handle_socket(socket, state.telemetry_tx))
 }
 
 async fn handle_socket(mut socket: WebSocket, tx: broadcast::Sender<DashboardData>) {

@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OTel Metrics - F1 Pipeline</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', 'Segoe UI', Tahoma, sans-serif;
+            background: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 100%);
+            color: #fff;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* ── Header ───────────────────────────────────────────── */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding: 20px 28px;
+            background: rgba(42, 42, 42, 0.9);
+            border-radius: 14px;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+        }
+
+        .logo {
+            font-size: 1.6em;
+            font-weight: 700;
+            background: linear-gradient(135deg, #e10600 0%, #ff6b35 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .badge {
+            padding: 6px 14px;
+            background: rgba(225, 6, 0, 0.15);
+            border: 1px solid rgba(225, 6, 0, 0.4);
+            border-radius: 20px;
+            font-size: 0.78em;
+            font-weight: 600;
+            color: #ff6b6b;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .status-box {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 6px;
+        }
+
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.82em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .status-pill.connected {
+            background: rgba(0, 255, 100, 0.1);
+            border: 1px solid rgba(0, 255, 100, 0.3);
+            color: #00ff64;
+        }
+
+        .status-pill.waiting {
+            background: rgba(255, 170, 0, 0.1);
+            border: 1px solid rgba(255, 170, 0, 0.3);
+            color: #ffaa00;
+        }
+
+        .status-pill.error {
+            background: rgba(255, 0, 0, 0.1);
+            border: 1px solid rgba(255, 0, 0, 0.3);
+            color: #ff4444;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+            animation: pulse 2s infinite;
+        }
+
+        .meta-line {
+            font-size: 0.78em;
+            color: #666;
+        }
+
+        /* ── Stats bar ────────────────────────────────────────── */
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+            margin-bottom: 28px;
+        }
+
+        .stat-card {
+            background: rgba(42, 42, 42, 0.7);
+            border-radius: 12px;
+            padding: 18px 22px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: 700;
+            background: linear-gradient(135deg, #fff 0%, #aaa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stat-label {
+            font-size: 0.75em;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-top: 4px;
+        }
+
+        /* ── Section headers ──────────────────────────────────── */
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 28px 0 16px;
+            font-size: 0.85em;
+            font-weight: 600;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .section-header::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        /* ── Metric cards grid ────────────────────────────────── */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 14px;
+        }
+
+        .metric-card {
+            background: rgba(42, 42, 42, 0.8);
+            border-radius: 12px;
+            padding: 20px;
+            border-left: 4px solid #e10600;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            border-right: 1px solid rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        .metric-card.gauge { border-left-color: #00d4ff; }
+        .metric-card.counter { border-left-color: #00ff64; }
+        .metric-card.histogram { border-left-color: #ff9900; }
+
+        .metric-name {
+            font-size: 0.82em;
+            font-weight: 600;
+            color: #ccc;
+            margin-bottom: 6px;
+            font-family: 'SF Mono', Menlo, monospace;
+            word-break: break-all;
+        }
+
+        .metric-value-row {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            font-size: 2em;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .metric-unit {
+            font-size: 0.85em;
+            color: #888;
+            font-weight: 500;
+        }
+
+        .metric-desc {
+            font-size: 0.75em;
+            color: #666;
+            line-height: 1.4;
+        }
+
+        .metric-type-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.65em;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 8px;
+        }
+
+        .metric-type-badge.gauge {
+            background: rgba(0, 212, 255, 0.15);
+            color: #00d4ff;
+        }
+
+        .metric-type-badge.counter {
+            background: rgba(0, 255, 100, 0.15);
+            color: #00ff64;
+        }
+
+        .metric-type-badge.histogram {
+            background: rgba(255, 153, 0, 0.15);
+            color: #ff9900;
+        }
+
+        /* ── Empty state ──────────────────────────────────────── */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #555;
+        }
+
+        .empty-state .icon {
+            font-size: 3em;
+            margin-bottom: 16px;
+        }
+
+        .empty-state p {
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+
+        .empty-state code {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            color: #aaa;
+        }
+
+        /* ── Nav ──────────────────────────────────────────────── */
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #888;
+            text-decoration: none;
+            font-size: 0.82em;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover {
+            color: #fff;
+        }
+
+        /* ── Animations ───────────────────────────────────────── */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .metric-card {
+            animation: fadeIn 0.3s ease forwards;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <div class="logo">OTEL METRICS</div>
+                <span class="badge">OpenTelemetry Sink</span>
+            </div>
+            <div class="status-box">
+                <div class="status-pill waiting" id="statusPill">
+                    <span class="pulse-dot"></span>
+                    <span id="statusText">Waiting for data…</span>
+                </div>
+                <div class="meta-line" id="metaLine">Polling /otel/api/metrics every 2s</div>
+            </div>
+        </div>
+
+        <!-- Stats bar -->
+        <div class="stats-bar">
+            <div class="stat-card">
+                <div class="stat-value" id="batchCount">0</div>
+                <div class="stat-label">Batches Received</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="metricCount">0</div>
+                <div class="stat-label">Unique Metrics</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="lastUpdated">—</div>
+                <div class="stat-label">Last Updated</div>
+            </div>
+        </div>
+
+        <!-- Gauges -->
+        <div class="section-header" id="gaugeHeader" style="display:none">
+            <span>Gauges (using same display for all)</span>
+        </div>
+        <div class="metrics-grid" id="gaugeGrid"></div>
+
+        <!-- Counters -->
+        <div class="section-header" id="counterHeader" style="display:none">
+            <span>Counters (using same display for all)</span>
+        </div>
+        <div class="metrics-grid" id="counterGrid"></div>
+
+        <!-- Histograms -->
+        <div class="section-header" id="histogramHeader" style="display:none">
+            <span>Histograms (using same display for all)</span>
+        </div>
+        <div class="metrics-grid" id="histogramGrid"></div>
+
+        <!-- Empty state -->
+        <div class="empty-state" id="emptyState">
+            <div class="icon">📡</div>
+            <p>No OTel metrics received yet.<br>
+            Start the Python streamer and OTel Collector to see metrics here.<br><br>
+            <code>docker compose up -d && uv run src/main.py</code></p>
+        </div>
+    </div>
+
+    <script>
+        const POLL_MS = 2000;
+
+        function formatValue(val) {
+            if (Number.isInteger(val)) return val.toLocaleString();
+            if (Math.abs(val) >= 1000) return val.toLocaleString(undefined, {maximumFractionDigits: 1});
+            if (Math.abs(val) < 0.01) return val.toExponential(2);
+            return val.toFixed(3);
+        }
+
+        function formatAge(secs) {
+            if (secs == null) return '-';
+            if (secs < 1) return 'just now';
+            if (secs < 60) return Math.floor(secs) + 's ago';
+            return Math.floor(secs / 60) + 'm ago';
+        }
+
+        function buildCard(m) {
+            const card = document.createElement('div');
+            card.className = `metric-card ${m.metric_type}`;
+            card.innerHTML = `
+                <div class="metric-name">${m.name}</div>
+                <div class="metric-value-row">
+                    <span class="metric-value">${formatValue(m.value)}</span>
+                    <span class="metric-unit">${m.unit}</span>
+                </div>
+                <div class="metric-desc">${m.description || '—'}</div>
+                <span class="metric-type-badge ${m.metric_type}">${m.metric_type}</span>
+            `;
+            return card;
+        }
+
+        async function poll() {
+            try {
+                const res = await fetch('/otel/api/metrics');
+                if (!res.ok) throw new Error(res.statusText);
+                const data = await res.json();
+
+                // update stats
+                document.getElementById('batchCount').textContent = data.batches_received;
+                document.getElementById('metricCount').textContent = data.metrics.length;
+                document.getElementById('lastUpdated').textContent = formatAge(data.last_updated_secs_ago);
+
+                // status pill
+                const pill = document.getElementById('statusPill');
+                const statusText = document.getElementById('statusText');
+                if (data.metrics.length > 0) {
+                    pill.className = 'status-pill connected';
+                    statusText.textContent = 'Receiving';
+                } else {
+                    pill.className = 'status-pill waiting';
+                    statusText.textContent = 'Waiting for data…';
+                }
+
+                // group by type
+                const groups = { gauge: [], counter: [], histogram: [] };
+                for (const m of data.metrics) {
+                    const g = groups[m.metric_type] || groups.gauge;
+                    g.push(m);
+                }
+
+                // render each group
+                for (const [type, arr] of Object.entries(groups)) {
+                    const grid = document.getElementById(type + 'Grid');
+                    const header = document.getElementById(type + 'Header');
+                    grid.innerHTML = '';
+                    if (arr.length > 0) {
+                        header.style.display = 'flex';
+                        arr.forEach(m => grid.appendChild(buildCard(m)));
+                    } else {
+                        header.style.display = 'none';
+                    }
+                }
+
+                // empty state
+                document.getElementById('emptyState').style.display =
+                    data.metrics.length === 0 ? 'block' : 'none';
+
+            } catch (err) {
+                const pill = document.getElementById('statusPill');
+                const statusText = document.getElementById('statusText');
+                pill.className = 'status-pill error';
+                statusText.textContent = 'Connection error';
+                console.error('Poll error:', err);
+            }
+        }
+
+        // kick off
+        poll();
+        setInterval(poll, POLL_MS);
+    </script>
+</body>
+</html>

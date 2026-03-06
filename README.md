@@ -7,6 +7,18 @@ It recreates telemetry pipeline used by F1 teams, processing frequencies from se
 
 ![Demo](assets/demo.gif)
 
+## Dual-Stream Architecture
+The pipeline uses **two separate data streams** by design:
+
+| Stream | Purpose | Protocol | Why |
+|--------|---------|----------|-----|
+| **Car Telemetry** (UDP) | Actual sensor data — speed, throttle, RPM, tyres | MsgPack over UDP | Raw performance: zero handshake, zero-copy decode, <10ms latency on every packet |
+| **OTel Metrics** (OTLP) | Pipeline observability — throughput, latency, packet loss | OTLP via OTel Collector | Aggregated & batched: monitors pipeline health at 1-5s intervals without impacting the data plane |
+
+**Why not send everything through OTel?** Car telemetry at 500Hz demands ms level processing per packet. OTel's batching, export intervals, and HTTP/gRPC overhead would add latency and risk drops under load. Conversely, the observability metrix don't need per-packet granularity, trends over seconds are enough.
+
+> NOTE: The car telemetry uses MsgPack for minimal serialization overhead (~3x smaller than JSON), which is incompatible with Open Telemetery's Protobuf/JSON wire format.
+
 ## Key Features
 1. **Data Upsampling:** F1's historical data (8Hz) interpolated to realistic sensor rates (500Hz) while preserving signal characteristics
 2. **Zero-Copy Processing:** Eliminated deserialization overhead using custom MessagePack decoder
@@ -24,22 +36,45 @@ It recreates telemetry pipeline used by F1 teams, processing frequencies from se
 
 
 ## Running the Pipeline
-### 1. Terminal 1:  Start Rust processor
+### 1. Terminal 1:  Start Collector & Rust processor
 ```bash
+docker compose up -d # to start open telemetery collector
 cd pipeline
 cargo run --release -- --no-simulation
 ```
-> Note: It stops after 5 sec of not receiving any data.
+> Note: The Rust backend now listens for OTLP metrics on `:8080/v1/metrics`.
 
 ### Terminal 2: Start Python telemetry stream
 ```bash
-pip install -r requirements.txt
+uv sync
 uv run src/main.py
 ```
 
 ### Browser: View dashboard
 ```bash
-open http://localhost:8080
+open http://localhost:8080 # Car Telemetery: live speed, throttle, RPM charts via WebSocket
+open http://localhost:8080/otel # Open Telemetery Matrix: pipeline observability (packets/sec, latency, loss rate)
+```
+
+### Verification
+- **Dashboard**: Open `http://localhost:8080` to see real-time car telemetry via WebSockets.
+- **OTel Dashboard**: Open `http://localhost:8080/otel` to see parsed OpenTelemetry metrics rendered by the Rust backend.
+- **Observability**: Look for `[OTEL-SINK]` logs in Terminal 1. This confirms the Collector is successfully forwarding metrics to the Rust sink.
+- **Collector Logs**: Run `docker logs -f otel-collector` to see the gRPC-to-HTTP translation in action.
+
+### Open Telemetery Collector
+On terminal-1:
+```bash
+# start the collector service
+docker compose up -d
+
+# watch the live metric stream
+docker logs -f otel-collector
+```
+
+On terminal-2, start python sender:
+```bash
+uv run src/main.py
 ```
 
 ## Config
@@ -53,29 +88,28 @@ Edit `src/config.py` to adjust:
 ```mermaid
 graph TB
     subgraph "Data Source Layer"
-        F1[FastF1 API] -->|Historical Data| DS[Data Source]
-        DS -->|8Hz Original| INT[Interpolator]
-        INT -->|500Hz Upsampled| PG[Packet Generator]
+        F1["FastF1 API"] -->|Historical Data| DS["Data Source"]
+        DS -->|8Hz Original| INT["Interpolator"]
+        INT -->|500Hz Upsampled| PG["Packet Generator"]
     end
     
-    subgraph "Network Layer"
-        PG -->|Binary Packets| UDP[UDP Socket :20777]
-        UDP -->|MessagePack| RUST[Rust Pipeline]
-    end
-    
-    subgraph "Processing Layer"
-        RUST --> DEC[Zero-Copy Decoder]
-        DEC --> PROC[Telemetry Processor]
-        PROC -->|<10ms deadline| BUF[Ring Buffer]
-        PROC --> STRAT[Strategy Engine]
-    end
-    
-    subgraph "Presentation Layer"
-        BUF --> WS[WebSocket Server]
-        WS -->|JSON| DASH[Dashboard :8080]
-        STRAT --> DEC_OUT[Decisions Output]
+    subgraph "Stream 1: Car Telemetry (Data Plane)"
+        PG -->|Binary Packets| UDP["UDP Socket :20777"]
+        UDP -->|MessagePack| RUST["Rust Pipeline"]
+        RUST --> DEC["Zero-Copy Decoder"]
+        DEC --> PROC["Telemetry Processor"]
+        PROC -->|"<10ms deadline"| BUF["Ring Buffer"]
+        BUF --> WS["WebSocket Server"]
+        WS -->|JSON| DASH["Car Dashboard :8080"]
     end
 
+    subgraph "Stream 2: Open Telmetry"
+        PG -->|Counters, Gauges, Histograms| OTEL["OpenTele SDK (Python)"]
+        OTEL -->|gRPC :4317| COLL["OpenTele Collector"]
+        COLL -->|OTLP/HTTP JSON| SINK["Rust /v1/metrics"]
+        SINK --> STORE["In-Memory OpenTeleStore"]
+        STORE --> ODASH["OpenTele Dashboard :8080/otel"]
+    end
 ```
 
 #### Data Flow
@@ -126,6 +160,7 @@ f1-telemetry-pipeline/
 ├── src/                    # Python telemetry streamer
 │   ├── data_source.py          # FastF1 data loader & interpolator
 │   ├── udp_streamer.py         # UDP packet transmission
+│   ├── oltp_opentele.py        # OpenTelemetry SDK instrumentation
 │   ├── telemetry_packet.py     # Packet structure definitions
 │   └── config.py               # Configuration parameters
 ├── pipeline/               # Rust processing pipeline
@@ -134,8 +169,11 @@ f1-telemetry-pipeline/
 │       ├── processor.rs        # Core processing logic
 │       ├── telemetry.rs        # Packet definitions
 │       ├── metrics.rs          # Performance tracking
+│       ├── open_tele_sink.rs        # OTLP JSON parser & metrics store
 │       └── dashboard.rs        # WebSocket server
-└── f1_cache/               # FastF1 data cache
+├── opentele-collector-config.yaml  # Open Telemetry Collector pipeline config
+├── docker-compose.yml              # Open Telemetry Collector service
+└── f1_cache/                       # FastF1 data cache
 ```
 
 ## Why This Matters
